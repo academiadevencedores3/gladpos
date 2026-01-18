@@ -8,6 +8,9 @@
     <!-- Importação do TailwindCSS via CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     
+    <!-- Importação do Chart.js para gráficos -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
     <!-- Importação da fonte Inter do Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -95,53 +98,223 @@
         body.light .meta-card h3 {
             color: #b91c1c; /* Cor do subtítulo para tema claro (equivalente a text-red-700) */
         }
+
+        /* Classes utilitárias para scrollbar personalizada (opcional) */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: var(--bg-primary); 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: var(--bg-tertiary); 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #4b5563; 
+        }
+
+        /* ========================================= */
+        /* CSS Específico para a Árvore Binária      */
+        /* ========================================= */
+        .tree ul {
+            padding-top: 20px; 
+            position: relative;
+            transition: all 0.5s;
+            display: flex;
+            justify-content: center;
+        }
+
+        .tree li {
+            float: left; 
+            text-align: center;
+            list-style-type: none;
+            position: relative;
+            padding: 20px 5px 0 5px;
+            transition: all 0.5s;
+        }
+
+        /* Linhas conectoras */
+        .tree li::before, .tree li::after {
+            content: '';
+            position: absolute; 
+            top: 0; 
+            right: 50%;
+            border-top: 1px solid var(--border-color);
+            width: 50%; 
+            height: 20px;
+        }
+        .tree li::after {
+            right: auto; 
+            left: 50%;
+            border-left: 1px solid var(--border-color);
+        }
+
+        /* Remove conectores dos nós únicos */
+        .tree li:only-child::after, .tree li:only-child::before {
+            display: none;
+        }
+        .tree li:only-child { 
+            padding-top: 0;
+        }
+
+        /* Remove conector esquerdo do primeiro filho */
+        .tree li:first-child::before {
+            border: 0 none;
+        }
+        /* Remove conector direito do último filho */
+        .tree li:last-child::after {
+            border: 0 none;
+        }
+        
+        /* Adiciona a linha vertical para baixo para nós que têm filhos */
+        .tree li:last-child::before{
+            border-right: 1px solid var(--border-color);
+            border-radius: 0 5px 0 0;
+        }
+        .tree li:first-child::after{
+            border-radius: 5px 0 0 0;
+        }
+
+        /* Estilos do Nó (Avatar) */
+        .tree-node {
+            display: inline-block;
+            padding: 5px;
+            text-decoration: none;
+            border-radius: 50%;
+            transition: all 0.3s;
+            position: relative;
+            z-index: 10;
+        }
+        
+        /* Linha vertical descendo do pai para os filhos */
+        .tree ul ul::before{
+            content: '';
+            position: absolute; 
+            top: 0; 
+            left: 50%;
+            border-left: 1px solid var(--border-color);
+            width: 0; 
+            height: 20px;
+        }
+        
+        /* Tooltip personalizado */
+        .tree-tooltip {
+            visibility: hidden;
+            width: 140px;
+            background-color: var(--bg-tertiary);
+            color: var(--text-primary);
+            text-align: center;
+            border-radius: 6px;
+            padding: 8px;
+            position: absolute;
+            z-index: 20;
+            bottom: 110%; /* Posiciona acima */
+            left: 50%;
+            margin-left: -70px; /* Centraliza */
+            opacity: 0;
+            transition: opacity 0.3s;
+            border: 1px solid var(--border-color);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
+        }
+        
+        .tree-tooltip::after {
+            content: "";
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            margin-left: -5px;
+            border-width: 5px;
+            border-style: solid;
+            border-color: var(--border-color) transparent transparent transparent;
+        }
+
+        /* Mostra tooltip no hover ou foco (touch) */
+        .tree-node:hover .tree-tooltip,
+        .tree-node:focus .tree-tooltip,
+        .tree-node:active .tree-tooltip {
+            visibility: visible;
+            opacity: 1;
+        }
     </style>
 </head>
 <body>
 
     <!-- Notificação "Link Copiado!" -->
-    <div id="copy-toast" class="fixed top-5 right-5 bg-green-500 text-white py-2 px-4 rounded-lg shadow-lg opacity-0 transform translate-y-2 z-50">
+    <div id="copy-toast" class="fixed top-5 right-5 bg-green-500 text-white py-2 px-4 rounded-lg shadow-lg opacity-0 transform translate-y-2 z-50 pointer-events-none">
         Link Copiado!
     </div>
 
-    <div class="flex min-h-screen">
+    <!-- Overlay para Mobile (Fundo escuro quando o menu abre) -->
+    <div id="sidebar-overlay" class="fixed inset-0 bg-black/50 z-30 hidden md:hidden backdrop-blur-sm transition-opacity duration-300"></div>
+
+    <!-- HEADER MOBILE (Visível apenas em telas pequenas) -->
+    <header class="md:hidden flex items-center justify-between p-4 bg-dynamic-secondary border-b border-dynamic sticky top-0 z-20">
+        <div class="flex items-center">
+            <button id="mobile-menu-btn" class="text-dynamic-primary p-2 -ml-2 rounded-lg hover:bg-dynamic-tertiary focus:outline-none">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
+            </button>
+            <div class="flex items-center ml-3">
+                <div class="w-8 h-8 bg-red-600 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-lg">G</div>
+                <h1 class="text-lg font-bold ml-2 text-dynamic-primary">GladPOS</h1>
+            </div>
+        </div>
+    </header>
+
+    <div class="flex min-h-screen relative">
         <!-- ================================================== -->
-        <!-- SIMULAÇÃO DO COMPONENTE: Sidebar (Navegação)       -->
+        <!-- SIDEBAR (Navegação Responsiva)                     -->
         <!-- ================================================== -->
-        <aside class="w-20 lg:w-64 bg-dynamic-secondary p-2 lg:p-4 shadow-2xl flex flex-col">
-            <div class="flex items-center justify-center lg:justify-start mb-10 pt-4">
-                <!-- Logo -->
-                <div class="w-12 h-12 bg-red-600 rounded-full flex items-center justify-center text-white font-bold text-xl shadow-lg">
+        <aside id="sidebar" class="fixed inset-y-0 left-0 z-40 w-64 bg-dynamic-secondary flex flex-col transition-transform duration-300 ease-in-out transform -translate-x-full md:translate-x-0 md:static md:inset-auto shadow-2xl border-r border-dynamic md:w-20 lg:w-64">
+            
+            <!-- Cabeçalho da Sidebar (Desktop/Tablet) -->
+            <div class="hidden md:flex items-center justify-center lg:justify-start h-20 px-4 border-b border-dynamic lg:border-none">
+                <div class="w-10 h-10 lg:w-10 lg:h-10 bg-red-600 rounded-full flex items-center justify-center text-white font-bold text-xl shadow-lg flex-shrink-0">
                     G
                 </div>
-                <h1 class="hidden lg:block text-2xl font-bold ml-3 text-dynamic-primary">GladPOS</h1>
+                <h1 class="hidden lg:block text-2xl font-bold ml-3 text-dynamic-primary truncate">GladPOS</h1>
             </div>
-            <nav class="flex-grow">
-                <ul id="nav-menu" class="space-y-2">
+
+            <!-- Cabeçalho da Sidebar (Mobile - botão fechar) -->
+            <div class="flex md:hidden items-center justify-between p-4 border-b border-dynamic">
+                <span class="text-lg font-bold text-dynamic-primary">Menu</span>
+                <button id="close-sidebar-btn" class="text-dynamic-muted hover:text-white">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+
+            <nav class="flex-grow overflow-y-auto py-4 custom-scrollbar">
+                <ul id="nav-menu" class="space-y-1 px-2">
                     <!-- Os itens do menu serão injetados pelo JavaScript -->
                 </ul>
             </nav>
-            <div class="mt-auto">
-                 <button class="w-full flex items-center justify-center lg:justify-start p-3 rounded-lg transition-all duration-200 hover:bg-red-700 text-dynamic-muted hover:text-white">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
-                    <span class="hidden lg:block ml-3" data-translate-key="logout">Sair</span>
+
+            <div class="p-4 mt-auto border-t border-dynamic">
+                 <button class="w-full flex items-center justify-center lg:justify-start p-3 rounded-lg transition-all duration-200 hover:bg-red-700 text-dynamic-muted hover:text-white group">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 flex-shrink-0 group-hover:text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
+                    <span class="hidden lg:block ml-3 font-medium" data-translate-key="logout">Sair</span>
                 </button>
             </div>
         </aside>
 
         <!-- ================================================== -->
-        <!-- SIMULAÇÃO DO COMPONENTE: Main (Conteúdo Principal) -->
+        <!-- MAIN (Conteúdo Principal)                          -->
         <!-- ================================================== -->
-        <main id="main-content" class="flex-1 p-4 sm:p-6 lg:p-8">
+        <main id="main-content" class="flex-1 min-w-0 overflow-x-hidden p-4 sm:p-6 lg:p-8 bg-dynamic-primary">
             
             <!-- ================================================== -->
             <!-- SEÇÃO 1: Visão Geral (Padrão)                      -->
             <!-- ================================================== -->
             <div id="overview" class="section-content active">
                 <!-- Cabeçalho da Seção com Ícones -->
-                <div class="flex justify-between items-center mb-6">
-                    <h2 class="text-3xl font-bold text-dynamic-primary" data-translate-key="overview_title">Visão Geral</h2>
-                    <div id="header-icons-overview" class="flex items-center space-x-1 relative"></div>
+                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+                    <h2 class="text-2xl sm:text-3xl font-bold text-dynamic-primary" data-translate-key="overview_title">Visão Geral</h2>
+                    <div id="header-icons-overview" class="flex items-center space-x-2 relative self-end sm:self-auto"></div>
                 </div>
                 
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -153,10 +326,9 @@
                         <h3 class="text-dynamic-muted text-lg mb-2" data-translate-key="today_earnings">Ganhos de Hoje (POL)</h3>
                         <p class="text-4xl font-extrabold text-green-400">+9.45</p>
                     </div>
-                    <!-- CORREÇÃO: Classes de texto removidas e classe 'meta-card' adicionada -->
                     <div class="meta-card bg-red-600/20 border border-red-500 p-6 rounded-xl shadow-lg">
                         <h3 class="text-lg mb-2" data-translate-key="days_goal">Meta de 90 dias</h3>
-                        <p class="text-4xl font-extrabold">52 <span class="text-2xl font-semibold" data-translate-key="days_remaining">dias restantes</span></p>
+                        <p class="text-4xl font-extrabold">52 <span class="text-xl sm:text-2xl font-semibold" data-translate-key="days_remaining">dias restantes</span></p>
                     </div>
                 </div>
 
@@ -164,7 +336,7 @@
                 <div class="mt-8 bg-dynamic-secondary p-6 rounded-xl shadow-lg border border-dynamic">
                     <h3 class="text-xl font-semibold text-dynamic-primary mb-4" data-translate-key="earnings_cap">Teto de Ganhos</h3>
                     <div class="flex flex-col md:flex-row items-center gap-6 md:gap-10">
-                        <div class="relative w-40 h-40">
+                        <div class="relative w-40 h-40 flex-shrink-0">
                             <svg class="w-full h-full" viewBox="0 0 100 100">
                                 <circle class="text-gray-700" stroke-width="10" stroke="currentColor" fill="transparent" r="45" cx="50" cy="50"/>
                                 <circle class="progress-ring__circle text-blue-500" stroke-width="10" stroke-linecap="round" stroke="currentColor" fill="transparent" r="45" cx="50" cy="50" style="stroke-dasharray: 282.7; stroke-dashoffset: calc(282.7 - (282.7 * 100) / 200);"/>
@@ -182,22 +354,23 @@
                             <div class="space-y-2">
                                 <div class="flex items-center justify-center md:justify-start">
                                     <span class="w-3 h-3 rounded-full bg-blue-500 mr-2"></span>
-                                    <span data-translate-key="daily_earnings_label">Ganhos Diários:</span><span class="font-semibold ml-1">100%</span>
+                                    <span data-translate-key="daily_earnings_label">Ganhos Diários:</span><span class="font-semibold ml-1 text-dynamic-primary">100%</span>
                                 </div>
                                 <div class="flex items-center justify-center md:justify-start">
                                     <span class="w-3 h-3 rounded-full bg-red-500 mr-2"></span>
-                                    <span data-translate-key="binary_bonus_label">Bônus Binário:</span><span class="font-semibold ml-1">40%</span>
+                                    <span data-translate-key="binary_bonus_label">Bônus Binário:</span><span class="font-semibold ml-1 text-dynamic-primary">40%</span>
                                 </div>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- Gráfico de Ganhos (Placeholder) -->
+                <!-- Gráfico de Ganhos: Chart.js Integrado -->
                 <div class="mt-8 bg-dynamic-secondary p-6 rounded-xl shadow-lg border border-dynamic">
                     <h3 class="text-xl font-semibold mb-4 text-dynamic-primary" data-translate-key="earnings_evolution">Evolução dos Ganhos</h3>
-                    <div class="h-64 bg-dynamic-tertiary/50 rounded-lg flex items-center justify-center">
-                        <p class="text-dynamic-muted">[ Visualização do gráfico de linha aqui ]</p>
+                    <!-- Container relativo para o Chart.js com altura definida -->
+                    <div class="relative h-72 w-full">
+                        <canvas id="earningsChart"></canvas>
                     </div>
                 </div>
 
@@ -225,15 +398,15 @@
             <!-- SEÇÃO: Perfil                               -->
             <!-- ================================================== -->
             <div id="profile" class="section-content">
-                <div class="flex justify-between items-center mb-6">
-                    <h2 class="text-3xl font-bold text-dynamic-primary" data-translate-key="profile_title">Perfil</h2>
-                    <div id="header-icons-profile" class="flex items-center space-x-1 relative"></div>
+                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+                    <h2 class="text-2xl sm:text-3xl font-bold text-dynamic-primary" data-translate-key="profile_title">Perfil</h2>
+                    <div id="header-icons-profile" class="flex items-center space-x-2 relative self-end sm:self-auto"></div>
                 </div>
                 <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
                     <div class="lg:col-span-1 bg-dynamic-secondary p-6 rounded-xl shadow-lg border border-dynamic flex flex-col items-center">
-                        <div class="relative mb-4">
-                            <img id="modal-profile-img-main" src="https://placehold.co/128x128/4a5568/ffffff?text=U" alt="User Profile" class="w-32 h-32 rounded-full object-cover border-4 border-dynamic">
-                            <label for="photo-upload-main" class="absolute bottom-0 right-0 bg-red-600 rounded-full p-2 cursor-pointer hover:bg-red-700">
+                        <div class="relative mb-4 group">
+                            <img id="modal-profile-img-main" src="https://placehold.co/128x128/4a5568/ffffff?text=U" alt="User Profile" class="w-32 h-32 rounded-full object-cover border-4 border-dynamic shadow-xl">
+                            <label for="photo-upload-main" class="absolute bottom-0 right-0 bg-red-600 rounded-full p-2 cursor-pointer hover:bg-red-700 transition-colors shadow-lg">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
                                 <input type="file" id="photo-upload-main" class="hidden" accept="image/*">
                             </label>
@@ -246,13 +419,13 @@
                     <div class="lg:col-span-2 space-y-6">
                         <div class="bg-dynamic-secondary p-6 rounded-xl shadow-lg border border-dynamic">
                             <h3 class="text-xl font-semibold text-dynamic-primary mb-4" data-translate-key="user_info">Informações do Utilizador</h3>
-                            <div class="space-y-3">
-                                <p><strong data-translate-key="login">Login:</strong> NomeDeLogin</p>
-                                <p><strong data-translate-key="sponsor">Patrocinador:</strong> NomeDoPatrocinador</p>
-                                <p><strong data-translate-key="email">E-mail:</strong> utilizador@email.com</p>
-                                <p><strong data-translate-key="current_plan">Plano Atual:</strong> <span class="font-bold text-red-400">Inativo</span></p>
+                            <div class="space-y-3 text-dynamic-secondary">
+                                <p class="flex justify-between sm:justify-start sm:gap-4 border-b border-dynamic pb-2 sm:border-none sm:pb-0"><strong class="text-dynamic-muted" data-translate-key="login">Login:</strong> <span>NomeDeLogin</span></p>
+                                <p class="flex justify-between sm:justify-start sm:gap-4 border-b border-dynamic pb-2 sm:border-none sm:pb-0"><strong class="text-dynamic-muted" data-translate-key="sponsor">Patrocinador:</strong> <span>NomeDoPatrocinador</span></p>
+                                <p class="flex justify-between sm:justify-start sm:gap-4 border-b border-dynamic pb-2 sm:border-none sm:pb-0"><strong class="text-dynamic-muted" data-translate-key="email">E-mail:</strong> <span>utilizador@email.com</span></p>
+                                <p class="flex justify-between sm:justify-start sm:gap-4"><strong class="text-dynamic-muted" data-translate-key="current_plan">Plano Atual:</strong> <span class="font-bold text-red-400">Inativo</span></p>
                             </div>
-                            <button data-action="navigate" data-target="plans" class="mt-6 w-full bg-yellow-500 text-gray-900 font-bold py-3 px-4 rounded-lg hover:bg-yellow-600 transition-colors" data-translate-key="activate_plan">Ativar Plano Agora</button>
+                            <button data-action="navigate" data-target="plans" class="mt-6 w-full bg-yellow-500 text-gray-900 font-bold py-3 px-4 rounded-lg hover:bg-yellow-600 transition-colors shadow-md" data-translate-key="activate_plan">Ativar Plano Agora</button>
                         </div>
                     </div>
                 </div>
@@ -262,34 +435,34 @@
             <!-- NOVA SEÇÃO: Configurações                         -->
             <!-- ================================================== -->
             <div id="settings" class="section-content">
-                <div class="flex justify-between items-center mb-6">
-                    <h2 class="text-3xl font-bold text-dynamic-primary" data-translate-key="settings_title">Configurações</h2>
-                    <div id="header-icons-settings" class="flex items-center space-x-1 relative"></div>
+                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+                    <h2 class="text-2xl sm:text-3xl font-bold text-dynamic-primary" data-translate-key="settings_title">Configurações</h2>
+                    <div id="header-icons-settings" class="flex items-center space-x-2 relative self-end sm:self-auto"></div>
                 </div>
                 <div class="max-w-3xl mx-auto space-y-8">
                      <!-- Alteração de Senha -->
                     <div class="bg-dynamic-secondary p-6 rounded-xl shadow-lg border border-dynamic">
                         <h3 class="text-xl font-semibold text-dynamic-primary mb-4" data-translate-key="change_password">Alteração de Senha</h3>
                         <form class="space-y-4">
-                            <input type="password" placeholder="Nova Senha" data-translate-key="new_password_placeholder" class="w-full bg-dynamic-tertiary text-dynamic-primary p-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500">
-                            <input type="password" placeholder="Confirmar Nova Senha" data-translate-key="confirm_password_placeholder" class="w-full bg-dynamic-tertiary text-dynamic-primary p-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500">
-                            <button type="submit" class="w-full sm:w-auto bg-red-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-red-700 transition-colors" data-translate-key="change_password_button">Alterar Senha</button>
+                            <input type="password" placeholder="Nova Senha" data-translate-key="new_password_placeholder" class="w-full bg-dynamic-tertiary text-dynamic-primary p-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 border border-transparent focus:border-red-500 transition-all">
+                            <input type="password" placeholder="Confirmar Nova Senha" data-translate-key="confirm_password_placeholder" class="w-full bg-dynamic-tertiary text-dynamic-primary p-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 border border-transparent focus:border-red-500 transition-all">
+                            <button type="submit" class="w-full sm:w-auto bg-red-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-red-700 transition-colors shadow-md" data-translate-key="change_password_button">Alterar Senha</button>
                         </form>
                     </div>
                     <!-- Senha Financeira -->
                     <div class="bg-dynamic-secondary p-6 rounded-xl shadow-lg border border-dynamic">
                         <h3 class="text-xl font-semibold text-dynamic-primary mb-4" data-translate-key="financial_password">Senha Financeira</h3>
                         <form class="space-y-4">
-                            <input type="password" maxlength="6" placeholder="Senha de 6 dígitos" data-translate-key="financial_password_placeholder" class="w-full bg-dynamic-tertiary text-dynamic-primary p-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500">
-                            <button type="submit" class="w-full sm:w-auto bg-red-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-red-700 transition-colors" data-translate-key="save_financial_password_button">Salvar Senha Financeira</button>
+                            <input type="password" maxlength="6" placeholder="Senha de 6 dígitos" data-translate-key="financial_password_placeholder" class="w-full bg-dynamic-tertiary text-dynamic-primary p-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 border border-transparent focus:border-red-500 transition-all">
+                            <button type="submit" class="w-full sm:w-auto bg-red-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-red-700 transition-colors shadow-md" data-translate-key="save_financial_password_button">Salvar Senha Financeira</button>
                         </form>
                     </div>
                     <!-- Carteira de Saque -->
                     <div class="bg-dynamic-secondary p-6 rounded-xl shadow-lg border border-dynamic">
                         <h3 class="text-xl font-semibold text-dynamic-primary mb-4" data-translate-key="withdrawal_wallet">Carteira de Saque (USDT - Polygon)</h3>
                         <form class="space-y-4">
-                            <input type="text" placeholder="Endereço da sua carteira" data-translate-key="wallet_address_placeholder" class="w-full bg-dynamic-tertiary text-dynamic-primary p-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500">
-                            <button type="submit" class="w-full sm:w-auto bg-red-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-red-700 transition-colors" data-translate-key="save_wallet_button">Salvar Carteira</button>
+                            <input type="text" placeholder="Endereço da sua carteira" data-translate-key="wallet_address_placeholder" class="w-full bg-dynamic-tertiary text-dynamic-primary p-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 border border-transparent focus:border-red-500 transition-all">
+                            <button type="submit" class="w-full sm:w-auto bg-red-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-red-700 transition-colors shadow-md" data-translate-key="save_wallet_button">Salvar Carteira</button>
                         </form>
                     </div>
                 </div>
@@ -299,9 +472,9 @@
             <!-- SEÇÃO 2: Rede Binária                            -->
             <!-- ================================================== -->
             <div id="network" class="section-content">
-                 <div class="flex justify-between items-center mb-6">
-                    <h2 class="text-3xl font-bold text-dynamic-primary" data-translate-key="network_title">Rede Binária</h2>
-                    <div id="header-icons-network" class="flex items-center space-x-1 relative"></div>
+                 <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+                    <h2 class="text-2xl sm:text-3xl font-bold text-dynamic-primary" data-translate-key="network_title">Rede Binária</h2>
+                    <div id="header-icons-network" class="flex items-center space-x-2 relative self-end sm:self-auto"></div>
                 </div>
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
                     <div class="bg-dynamic-secondary p-6 rounded-xl text-center shadow-lg border border-dynamic">
@@ -324,16 +497,21 @@
                 </div>
                 <div class="bg-dynamic-secondary p-6 rounded-xl mb-8 shadow-lg border border-dynamic">
                     <h3 class="text-xl font-semibold mb-3 text-dynamic-primary" data-translate-key="your_referral_link">Seu Link de Indicação</h3>
-                    <div class="flex items-center bg-dynamic-primary p-3 rounded-md">
-                        <input id="referralLink" type="text" readOnly value="https://gladpos.com/register?ref=user123" class="bg-transparent text-dynamic-muted w-full outline-none"/>
-                        <button id="copyButton" class="ml-4 bg-red-600 text-white font-bold px-4 py-2 rounded-md hover:bg-red-700 transition-colors" data-translate-key="copy_button">Copiar</button>
+                    <div class="flex flex-col sm:flex-row items-stretch sm:items-center bg-dynamic-primary p-3 rounded-md border border-dynamic">
+                        <input id="referralLink" type="text" readOnly value="https://gladpos.com/register?ref=user123" class="bg-transparent text-dynamic-muted w-full outline-none mb-3 sm:mb-0 text-sm sm:text-base"/>
+                        <button id="copyButton" class="sm:ml-4 bg-red-600 text-white font-bold px-4 py-2 rounded-md hover:bg-red-700 transition-colors w-full sm:w-auto" data-translate-key="copy_button">Copiar</button>
                     </div>
                 </div>
                 <div class="bg-dynamic-secondary p-6 rounded-xl shadow-lg border border-dynamic">
                      <h3 class="text-xl font-semibold mb-4 text-dynamic-primary" data-translate-key="network_structure">Estrutura da Rede</h3>
-                     <div class="h-96 bg-dynamic-tertiary/50 rounded-lg flex items-center justify-center">
-                        <p class="text-dynamic-muted">[ Visualização da árvore binária aqui ]</p>
+                     
+                     <!-- ÁREA DA ÁRVORE COM SCROLL -->
+                     <div class="overflow-x-auto pb-4 custom-scrollbar">
+                         <div id="binary-tree-container" class="min-w-[600px] p-4 flex justify-center">
+                            <!-- A árvore será renderizada aqui via JS -->
+                         </div>
                      </div>
+                     <p class="text-center text-sm text-dynamic-muted mt-2" data-translate-key="tree_hint">Dica: Passe o mouse ou toque nos avatares para ver detalhes.</p>
                 </div>
             </div>
 
@@ -341,9 +519,9 @@
             <!-- SEÇÃO 3: Planos                                    -->
             <!-- ================================================== -->
             <div id="plans" class="section-content">
-                 <div class="flex justify-between items-center mb-6">
-                    <h2 class="text-3xl font-bold text-dynamic-primary" data-translate-key="plans_title">Planos de Entrada</h2>
-                    <div id="header-icons-plans" class="flex items-center space-x-1 relative"></div>
+                 <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+                    <h2 class="text-2xl sm:text-3xl font-bold text-dynamic-primary" data-translate-key="plans_title">Planos de Entrada</h2>
+                    <div id="header-icons-plans" class="flex items-center space-x-2 relative self-end sm:self-auto"></div>
                 </div>
                  <p class="text-dynamic-muted mb-8" data-translate-key="plans_subtitle">Acelere seus resultados escolhendo o plano ideal para você.</p>
                  <div id="plans-container" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6"></div>
@@ -353,31 +531,31 @@
             <!-- SEÇÃO 4: Contrato                                  -->
             <!-- ================================================== -->
             <div id="contract" class="section-content">
-                <div class="flex justify-between items-center mb-6">
-                    <h2 class="text-3xl font-bold text-dynamic-primary" data-translate-key="contract_title">Transparência do Contrato</h2>
-                    <div id="header-icons-contract" class="flex items-center space-x-1 relative"></div>
+                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+                    <h2 class="text-2xl sm:text-3xl font-bold text-dynamic-primary" data-translate-key="contract_title">Transparência do Contrato</h2>
+                    <div id="header-icons-contract" class="flex items-center space-x-2 relative self-end sm:self-auto"></div>
                 </div>
                 <p class="text-dynamic-muted mb-8" data-translate-key="contract_subtitle">Audite todas as transações de forma pública e transparente na rede Polygon.</p>
                 <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
                     <div class="lg:col-span-2 bg-dynamic-secondary p-6 rounded-xl shadow-lg border border-dynamic">
                         <h3 class="text-xl font-semibold mb-4 text-dynamic-primary" data-translate-key="funds_distribution">Divisão dos Fundos do Contrato</h3>
-                        <div class="space-y-4">
+                        <div class="space-y-6">
                             <div>
-                                <div class="flex justify-between mb-1">
+                                <div class="flex justify-between mb-2">
                                     <span class="text-base font-medium text-blue-400" data-translate-key="binary_earnings_pool">Binário e Ganhos</span>
                                     <span class="text-sm font-medium text-blue-400">75%</span>
                                 </div>
                                 <div class="w-full bg-dynamic-tertiary rounded-full h-4"><div class="bg-blue-500 h-4 rounded-full" style="width: 75%"></div></div>
                             </div>
                             <div>
-                                <div class="flex justify-between mb-1">
+                                <div class="flex justify-between mb-2">
                                     <span class="text-base font-medium text-yellow-400" data-translate-key="emergency_pool">Bolsão Emergencial</span>
                                     <span class="text-sm font-medium text-yellow-400">20%</span>
                                 </div>
                                 <div class="w-full bg-dynamic-tertiary rounded-full h-4"><div class="bg-yellow-400 h-4 rounded-full" style="width: 20%"></div></div>
                             </div>
                             <div>
-                                <div class="flex justify-between mb-1">
+                                <div class="flex justify-between mb-2">
                                     <span class="text-base font-medium text-purple-400" data-translate-key="maintenance_pool">Manutenção e Sócios</span>
                                     <span class="text-sm font-medium text-purple-400">5%</span>
                                 </div>
@@ -388,13 +566,13 @@
                     <div class="space-y-6">
                         <div class="bg-dynamic-secondary p-6 rounded-xl shadow-lg border border-dynamic">
                             <h3 class="text-dynamic-muted text-lg" data-translate-key="total_input_volume">Volume Total de Entrada</h3>
-                            <p class="text-2xl font-bold text-green-400 mt-1">1,578,900.43 POL</p>
+                            <p class="text-2xl font-bold text-green-400 mt-1 break-all">1,578,900.43 POL</p>
                         </div>
                          <div class="bg-dynamic-secondary p-6 rounded-xl shadow-lg border border-dynamic">
                             <h3 class="text-dynamic-muted text-lg" data-translate-key="total_output_volume">Volume Total de Saída</h3>
-                            <p class="text-2xl font-bold text-red-500 mt-1">987,650.12 POL</p>
+                            <p class="text-2xl font-bold text-red-500 mt-1 break-all">987,650.12 POL</p>
                         </div>
-                        <a href="https://polygonscan.com/" target="_blank" rel="noopener noreferrer" class="w-full block text-center bg-red-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-red-700 transition-all duration-200" data-translate-key="view_on_polygonscan">
+                        <a href="https://polygonscan.com/" target="_blank" rel="noopener noreferrer" class="w-full block text-center bg-red-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-red-700 transition-all duration-200 shadow-md" data-translate-key="view_on_polygonscan">
                             Ver Contrato na PolygonScan
                         </a>
                     </div>
@@ -405,9 +583,9 @@
             <!-- NOVA SEÇÃO: Financeiro                           -->
             <!-- ================================================== -->
             <div id="financial" class="section-content">
-                <div class="flex justify-between items-center mb-6">
-                    <h2 class="text-3xl font-bold text-dynamic-primary" data-translate-key="financial_title">Financeiro</h2>
-                    <div id="header-icons-financial" class="flex items-center space-x-1 relative"></div>
+                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+                    <h2 class="text-2xl sm:text-3xl font-bold text-dynamic-primary" data-translate-key="financial_title">Financeiro</h2>
+                    <div id="header-icons-financial" class="flex items-center space-x-2 relative self-end sm:self-auto"></div>
                 </div>
 
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
@@ -422,13 +600,13 @@
                     <div class="bg-dynamic-secondary p-6 rounded-xl shadow-lg border border-dynamic">
                         <h3 class="text-dynamic-muted text-lg mb-2" data-translate-key="available_balance">Saldo Disponível</h3>
                         <p class="text-3xl font-bold text-green-400 mb-3">1800.00 POL</p>
-                        <button class="w-full bg-red-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-red-700 transition-colors" data-translate-key="request_withdrawal">Solicitar Saque</button>
+                        <button class="w-full bg-red-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-red-700 transition-colors shadow-md" data-translate-key="request_withdrawal">Solicitar Saque</button>
                     </div>
                 </div>
 
-                <div class="bg-dynamic-secondary rounded-xl shadow-lg border border-dynamic">
-                    <div class="border-b border-dynamic">
-                        <nav id="financial-tabs" class="flex space-x-1 sm:space-x-4 p-2 sm:p-4" aria-label="Tabs">
+                <div class="bg-dynamic-secondary rounded-xl shadow-lg border border-dynamic overflow-hidden">
+                    <div class="border-b border-dynamic overflow-x-auto">
+                        <nav id="financial-tabs" class="flex p-2 sm:p-4 min-w-max space-x-2" aria-label="Tabs">
                             <!-- Abas serão injetadas aqui -->
                         </nav>
                     </div>
@@ -442,35 +620,40 @@
             <!-- NOVA SEÇÃO: Suporte                              -->
             <!-- ================================================== -->
             <div id="support" class="section-content">
-                <div class="flex justify-between items-center mb-6">
-                    <h2 class="text-3xl font-bold text-dynamic-primary" data-translate-key="support_title">Suporte</h2>
-                     <div id="header-icons-support" class="flex items-center space-x-1 relative"></div>
+                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+                    <h2 class="text-2xl sm:text-3xl font-bold text-dynamic-primary" data-translate-key="support_title">Suporte</h2>
+                     <div id="header-icons-support" class="flex items-center space-x-2 relative self-end sm:self-auto"></div>
                 </div>
                 <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
                     <div class="bg-dynamic-secondary p-6 rounded-xl shadow-lg border border-dynamic">
                         <h3 class="text-xl font-semibold text-dynamic-primary mb-4" data-translate-key="faq">Perguntas Frequentes (FAQ)</h3>
-                        <input type="text" placeholder="Pesquise por um tópico..." data-translate-key="search_placeholder" class="w-full bg-dynamic-tertiary text-dynamic-primary placeholder-dynamic-muted p-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 mb-6">
+                        <input type="text" placeholder="Pesquise por um tópico..." data-translate-key="search_placeholder" class="w-full bg-dynamic-tertiary text-dynamic-primary placeholder-dynamic-muted p-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 mb-6 border border-transparent focus:border-red-500 transition-all">
                         
                         <h3 class="text-xl font-semibold text-dynamic-primary mb-4" data-translate-key="common_topics">Tópicos Comuns</h3>
                         <ul class="space-y-2 text-red-400 mb-8">
-                            <li><a href="#" class="hover:underline" data-translate-key="faq_how_to_upgrade">Como fazer upgrade?</a></li>
-                            <li><a href="#" class="hover:underline" data-translate-key="faq_withdrawal_issues">Problemas com saque</a></li>
-                            <li><a href="#" class="hover:underline" data-translate-key="faq_binary_bonus">Como funciona o bônus binário?</a></li>
+                            <li><a href="#" class="hover:underline flex items-center"><span class="w-2 h-2 bg-red-500 rounded-full mr-2"></span><span data-translate-key="faq_how_to_upgrade">Como fazer upgrade?</span></a></li>
+                            <li><a href="#" class="hover:underline flex items-center"><span class="w-2 h-2 bg-red-500 rounded-full mr-2"></span><span data-translate-key="faq_withdrawal_issues">Problemas com saque</span></a></li>
+                            <li><a href="#" class="hover:underline flex items-center"><span class="w-2 h-2 bg-red-500 rounded-full mr-2"></span><span data-translate-key="faq_binary_bonus">Como funciona o bônus binário?</span></a></li>
                         </ul>
 
                         <h3 class="text-xl font-semibold text-dynamic-primary mb-4" data-translate-key="open_ticket">Abrir um Ticket</h3>
                         <form class="space-y-4">
-                            <input type="text" placeholder="Assunto" data-translate-key="subject_placeholder" class="w-full bg-dynamic-tertiary text-dynamic-primary p-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500">
-                            <textarea placeholder="Sua Mensagem" data-translate-key="message_placeholder" rows="4" class="w-full bg-dynamic-tertiary text-dynamic-primary p-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"></textarea>
-                            <button type="submit" class="w-full bg-red-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-red-700 transition-colors" data-translate-key="send_ticket">Enviar Ticket</button>
+                            <input type="text" placeholder="Assunto" data-translate-key="subject_placeholder" class="w-full bg-dynamic-tertiary text-dynamic-primary p-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 border border-transparent focus:border-red-500 transition-all">
+                            <textarea placeholder="Sua Mensagem" data-translate-key="message_placeholder" rows="4" class="w-full bg-dynamic-tertiary text-dynamic-primary p-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 border border-transparent focus:border-red-500 transition-all"></textarea>
+                            <button type="submit" class="w-full bg-red-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-red-700 transition-colors shadow-md" data-translate-key="send_ticket">Enviar Ticket</button>
                         </form>
                     </div>
                     <div class="bg-dynamic-secondary p-6 rounded-xl shadow-lg border border-dynamic">
                         <h3 class="text-xl font-semibold text-dynamic-primary mb-4" data-translate-key="live_chat">Chat ao Vivo</h3>
-                        <div class="bg-dynamic-tertiary/50 p-4 rounded-lg text-center">
-                            <p class="text-green-400 font-semibold mb-2" data-translate-key="chat_online">Nossos atendentes estão Online</p>
-                            <p class="text-sm text-dynamic-muted mb-4" data-translate-key="chat_online_desc">Clique abaixo para iniciar uma conversa.</p>
-                            <button class="bg-green-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-green-700 transition-colors" data-translate-key="start_chat">Iniciar Conversa</button>
+                        <div class="bg-dynamic-tertiary/50 p-6 rounded-lg text-center border border-dashed border-dynamic">
+                            <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-green-500/20 text-green-500 mb-4">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                                </svg>
+                            </div>
+                            <p class="text-green-400 font-semibold mb-2 text-lg" data-translate-key="chat_online">Nossos atendentes estão Online</p>
+                            <p class="text-sm text-dynamic-muted mb-6" data-translate-key="chat_online_desc">Clique abaixo para iniciar uma conversa em tempo real.</p>
+                            <button class="w-full sm:w-auto bg-green-600 text-white font-bold py-3 px-8 rounded-lg hover:bg-green-700 transition-colors shadow-lg" data-translate-key="start_chat">Iniciar Conversa</button>
                         </div>
                     </div>
                 </div>
@@ -496,19 +679,43 @@
                     { id: 2, type: 'sistema', message: 'Manutenção programada para 15/08 às 23:00.', timestamp: 'há 2 horas', read: false },
                     { id: 3, type: 'suporte', message: 'Seu ticket #122 foi fechado.', timestamp: 'ontem', read: true },
                 ],
+                // Refatorado para usar 'noteType' em vez de texto fixo
                 plans: [
-                    { name: 'Gladp 1', investment: '10 à 20', binaryGain: 3, dailyLimit: 'N/A', note: "NÃO DOBRA EM 90 DIAS" },
-                    { name: 'Gladp 2', investment: '21 à 200', binaryGain: 4, dailyLimit: '40', note: "DOBRA EM 90 DIAS" },
-                    { name: 'Gladp 3', investment: '201 à 500', binaryGain: 5, dailyLimit: '400', note: "DOBRA EM 90 DIAS" },
-                    { name: 'Gladp 4', investment: '501 à 1.000', binaryGain: 6, dailyLimit: '2K', note: "DOBRA EM 90 DIAS" },
-                    { name: 'Gladp 5', investment: '1.001 à 2.000', binaryGain: 7, dailyLimit: '4K', note: "DOBRA EM 90 DIAS" },
-                    { name: 'Gladp 6', investment: '2.001 à 5.000', binaryGain: 8, dailyLimit: '10K', note: "DOBRA EM 90 DIAS" },
-                    { name: 'Spartacus 7', investment: '7.000', binaryGain: 9, dailyLimit: '14K', note: "DOBRA EM 90 DIAS" },
-                    { name: 'Spartacus 8', investment: '10.000', binaryGain: 10, dailyLimit: '20K', note: "DOBRA EM 90 DIAS" },
-                    { name: 'Spartacus 9', investment: '15.000', binaryGain: 11, dailyLimit: '30K', note: "DOBRA EM 90 DIAS" },
-                    { name: 'Spartacus 10', investment: '20.000', binaryGain: 12, dailyLimit: '40K', note: "DOBRA EM 90 DIAS" },
-                ]
+                    { name: 'Gladp 1', investment: '10 à 20', binaryGain: 3, dailyLimit: 'N/A', noteType: "no_double" },
+                    { name: 'Gladp 2', investment: '21 à 200', binaryGain: 4, dailyLimit: '40', noteType: "double" },
+                    { name: 'Gladp 3', investment: '201 à 500', binaryGain: 5, dailyLimit: '400', noteType: "double" },
+                    { name: 'Gladp 4', investment: '501 à 1.000', binaryGain: 6, dailyLimit: '2K', noteType: "double" },
+                    { name: 'Gladp 5', investment: '1.001 à 2.000', binaryGain: 7, dailyLimit: '4K', noteType: "double" },
+                    { name: 'Gladp 6', investment: '2.001 à 5.000', binaryGain: 8, dailyLimit: '10K', noteType: "double" },
+                    { name: 'Spartacus 7', investment: '7.000', binaryGain: 9, dailyLimit: '14K', noteType: "double" },
+                    { name: 'Spartacus 8', investment: '10.000', binaryGain: 10, dailyLimit: '20K', noteType: "double" },
+                    { name: 'Spartacus 9', investment: '15.000', binaryGain: 11, dailyLimit: '30K', noteType: "double" },
+                    { name: 'Spartacus 10', investment: '20.000', binaryGain: 12, dailyLimit: '40K', noteType: "double" },
+                ],
+                // Dados da Árvore Binária (Simulação)
+                binaryTreeData: {
+                    name: 'Você', login: 'meu_usuario', img: 'https://placehold.co/50x50/4a5568/ffffff?text=Eu', active: true,
+                    children: [
+                        {
+                            name: 'João', login: 'joao123', img: 'https://placehold.co/50x50/38A169/ffffff?text=J', active: true,
+                            children: [
+                                { name: 'Pedro', login: 'pedro_invest', img: 'https://placehold.co/50x50/3182CE/ffffff?text=P', active: true },
+                                { name: 'Vago', login: 'Disponível', img: '', active: false }
+                            ]
+                        },
+                        {
+                            name: 'Maria', login: 'maria_bet', img: 'https://placehold.co/50x50/E53E3E/ffffff?text=M', active: true,
+                            children: [
+                                { name: 'Ana', login: 'aninha', img: 'https://placehold.co/50x50/805AD5/ffffff?text=A', active: true },
+                                { name: 'Vago', login: 'Disponível', img: '', active: false }
+                            ]
+                        }
+                    ]
+                }
             };
+
+            // Variável global para armazenar a instância do gráfico
+            let chartInstance = null;
             
             // --- Dicionário de Traduções ---
             const translations = {
@@ -523,6 +730,10 @@
                     'contract_title': 'Transparência do Contrato', 'contract_subtitle': 'Audite todas as transações de forma pública e transparente na rede Polygon.', 'funds_distribution': 'Divisão dos Fundos do Contrato', 'binary_earnings_pool': 'Binário e Ganhos', 'emergency_pool': 'Bolsão Emergencial', 'maintenance_pool': 'Manutenção e Sócios', 'total_input_volume': 'Volume Total de Entrada', 'total_output_volume': 'Volume Total de Saída', 'view_on_polygonscan': 'Ver Contrato na PolygonScan',
                     'financial_title': 'Financeiro', 'package_earnings': 'Ganhos do Pacote', 'binary_earnings': 'Ganhos de Binário', 'available_balance': 'Saldo Disponível', 'request_withdrawal': 'Solicitar Saque',
                     'support_title': 'Suporte', 'faq': 'Perguntas Frequentes (FAQ)', 'search_placeholder': 'Pesquise por um tópico...', 'common_topics': 'Tópicos Comuns', 'faq_how_to_upgrade': 'Como fazer upgrade?', 'faq_withdrawal_issues': 'Problemas com saque', 'faq_binary_bonus': 'Como funciona o bônus binário?', 'open_ticket': 'Abrir um Ticket', 'subject_placeholder': 'Assunto', 'message_placeholder': 'Sua Mensagem', 'send_ticket': 'Enviar Ticket', 'live_chat': 'Chat ao Vivo', 'chat_online': 'Nossos atendentes estão Online', 'chat_online_desc': 'Clique abaixo para iniciar uma conversa.', 'start_chat': 'Iniciar Conversa',
+                    // NOVAS CHAVES ADICIONADAS
+                    'plan_investment': 'Investimento', 'plan_binary': 'Ganho Binário', 'plan_daily_limit': 'Limite Diário de', 'plan_note_double': 'DOBRA EM 90 DIAS', 'plan_note_no_double': 'NÃO DOBRA EM 90 DIAS', 'plan_btn_active': 'Plano Ativo', 'plan_btn_upgrade': 'Fazer Upgrade',
+                    'fin_history_title': 'Histórico de Ganhos do Pacote', 'fin_col_date': 'Data', 'fin_col_desc': 'Descrição', 'fin_col_value': 'Valor (POL)', 'fin_desc_daily': 'Rendimento diário', 'fin_report_binary': 'Relatório de Binário', 'fin_no_records': 'Nenhum registro encontrado para este período.', 'fin_history_packages': 'Histórico de Pacotes', 'fin_upgrade_text': 'Upgrade de',
+                    'tree_active': 'Ativo', 'tree_vacant': 'Vago', 'tree_hint': 'Dica: Passe o mouse ou toque nos avatares para ver detalhes.', 'tree_you': 'Você'
                 },
                 'en': {
                     'lang_name': 'English',
@@ -535,6 +746,10 @@
                     'contract_title': 'Contract Transparency', 'contract_subtitle': 'Audit all transactions publicly and transparently on the Polygon network.', 'funds_distribution': 'Contract Funds Distribution', 'binary_earnings_pool': 'Binary & Earnings', 'emergency_pool': 'Emergency Pool', 'maintenance_pool': 'Maintenance & Partners', 'total_input_volume': 'Total Input Volume', 'total_output_volume': 'Total Output Volume', 'view_on_polygonscan': 'View Contract on PolygonScan',
                     'financial_title': 'Financial', 'package_earnings': 'Package Earnings', 'binary_earnings': 'Binary Earnings', 'available_balance': 'Available Balance', 'request_withdrawal': 'Request Withdrawal',
                     'support_title': 'Support', 'faq': 'Frequently Asked Questions (FAQ)', 'search_placeholder': 'Search for a topic...', 'common_topics': 'Common Topics', 'faq_how_to_upgrade': 'How to upgrade?', 'faq_withdrawal_issues': 'Withdrawal issues', 'faq_binary_bonus': 'How does the binary bonus work?', 'open_ticket': 'Open a Ticket', 'subject_placeholder': 'Subject', 'message_placeholder': 'Your Message', 'send_ticket': 'Send Ticket', 'live_chat': 'Live Chat', 'chat_online': 'Our agents are Online', 'chat_online_desc': 'Click below to start a conversation.', 'start_chat': 'Start Chat',
+                    // NOVAS CHAVES ADICIONADAS
+                    'plan_investment': 'Investment', 'plan_binary': 'Binary Gain', 'plan_daily_limit': 'Daily Limit of', 'plan_note_double': 'DOUBLES IN 90 DAYS', 'plan_note_no_double': 'DOES NOT DOUBLE IN 90 DAYS', 'plan_btn_active': 'Active Plan', 'plan_btn_upgrade': 'Upgrade',
+                    'fin_history_title': 'Package Earnings History', 'fin_col_date': 'Date', 'fin_col_desc': 'Description', 'fin_col_value': 'Value (POL)', 'fin_desc_daily': 'Daily earning', 'fin_report_binary': 'Binary Report', 'fin_no_records': 'No records found for this period.', 'fin_history_packages': 'Package History', 'fin_upgrade_text': 'Upgrade from',
+                    'tree_active': 'Active', 'tree_vacant': 'Vacant', 'tree_hint': 'Tip: Hover or tap avatars to see details.', 'tree_you': 'You'
                 },
                 'es': {
                     'lang_name': 'Español',
@@ -544,9 +759,13 @@
                     'settings_title': 'Configuración', 'change_password': 'Cambio de Contraseña', 'new_password_placeholder': 'Nueva Contraseña', 'confirm_password_placeholder': 'Confirmar Nueva Contraseña', 'change_password_button': 'Cambiar Contraseña', 'financial_password': 'Contraseña Financiera', 'financial_password_placeholder': 'Contraseña de 6 dígitos', 'save_financial_password_button': 'Guardar Contraseña Financiera', 'withdrawal_wallet': 'Cartera de Retiro (USDT - Polygon)', 'wallet_address_placeholder': 'Dirección de su cartera', 'save_wallet_button': 'Guardar Cartera',
                     'network_title': 'Red Binaria', 'total_referrals': 'Total de Referidos', 'left_leg_volume': 'Volumen Izquierda', 'right_leg_volume': 'Volumen Derecha', 'daily_binary': 'Binario Diario', 'your_referral_link': 'Tu Enlace de Referido', 'copy_button': 'Copiar', 'network_structure': 'Estructura de la Red',
                     'plans_title': 'Planes de Entrada', 'plans_subtitle': 'Acelera tus resultados eligiendo el plan ideal para ti.',
-                    'contract_title': 'Transparencia del Contrato', 'contract_subtitle': 'Audita todas las transacciones de forma pública y transparente en la red Polygon.', 'funds_distribution': 'Distribución de Fondos del Contrato', 'binary_earnings_pool': 'Binario y Ganancias', 'emergency_pool': 'Fondo de Emergencia', 'maintenance_pool': 'Mantenimiento y Socios', 'total_input_volume': 'Volumen Total de Entrada', 'total_output_volume': 'Volumen Total de Salida', 'view_on_polygonscan': 'Ver Contrato en PolygonScan',
+                    'contract_title': 'Transparencia del Contrato', 'contract_subtitle': 'Audita todas las transacciones de forma pública e transparente en la red Polygon.', 'funds_distribution': 'Distribución de Fondos del Contrato', 'binary_earnings_pool': 'Binario y Ganancias', 'emergency_pool': 'Fondo de Emergencia', 'maintenance_pool': 'Mantenimiento y Socios', 'total_input_volume': 'Volumen Total de Entrada', 'total_output_volume': 'Volumen Total de Salida', 'view_on_polygonscan': 'Ver Contrato en PolygonScan',
                     'financial_title': 'Financiero', 'package_earnings': 'Ganancias del Paquete', 'binary_earnings': 'Ganancias de Binario', 'available_balance': 'Saldo Disponible', 'request_withdrawal': 'Solicitar Retiro',
                     'support_title': 'Soporte', 'faq': 'Preguntas Frecuentes (FAQ)', 'search_placeholder': 'Buscar un tema...', 'common_topics': 'Temas Comunes', 'faq_how_to_upgrade': '¿Cómo actualizar el plan?', 'faq_withdrawal_issues': 'Problemas con el retiro', 'faq_binary_bonus': '¿Cómo funciona el bono binario?', 'open_ticket': 'Abrir un Ticket', 'subject_placeholder': 'Asunto', 'message_placeholder': 'Tu Mensaje', 'send_ticket': 'Enviar Ticket', 'live_chat': 'Chat en Vivo', 'chat_online': 'Nuestros agentes están en línea', 'chat_online_desc': 'Haz clic abajo para iniciar una conversación.', 'start_chat': 'Iniciar Conversación',
+                    // NOVAS CHAVES ADICIONADAS
+                    'plan_investment': 'Inversión', 'plan_binary': 'Ganancia Binaria', 'plan_daily_limit': 'Límite Diario de', 'plan_note_double': 'SE DUPLICA EN 90 DÍAS', 'plan_note_no_double': 'NO SE DUPLICA EN 90 DÍAS', 'plan_btn_active': 'Plan Activo', 'plan_btn_upgrade': 'Actualizar',
+                    'fin_history_title': 'Historial de Ganancias del Paquete', 'fin_col_date': 'Fecha', 'fin_col_desc': 'Descripción', 'fin_col_value': 'Valor (POL)', 'fin_desc_daily': 'Rendimiento diario', 'fin_report_binary': 'Informe Binario', 'fin_no_records': 'No se encontraron registros para este período.', 'fin_history_packages': 'Historial de Paquetes', 'fin_upgrade_text': 'Actualización de',
+                    'tree_active': 'Activo', 'tree_vacant': 'Vacante', 'tree_hint': 'Consejo: Pase el mouse o toque los avatares para ver detalles.', 'tree_you': 'Tú'
                 }
             };
 
@@ -561,38 +780,204 @@
             const photoUploadMain = document.getElementById('photo-upload-main');
             const modalProfileImgMain = document.getElementById('modal-profile-img-main');
             const avatarGridMain = document.getElementById('avatar-grid-main');
+            const treeContainer = document.getElementById('binary-tree-container');
             
+            // Novos Elementos Mobile
+            const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+            const sidebar = document.getElementById('sidebar');
+            const sidebarOverlay = document.getElementById('sidebar-overlay');
+            const closeSidebarBtn = document.getElementById('close-sidebar-btn');
+
+            // --- Lógica Mobile Sidebar ---
+            function toggleSidebar() {
+                const isClosed = sidebar.classList.contains('-translate-x-full');
+                if (isClosed) {
+                    sidebar.classList.remove('-translate-x-full');
+                    sidebarOverlay.classList.remove('hidden');
+                    // Pequeno delay para a animação de opacidade
+                    setTimeout(() => sidebarOverlay.classList.remove('opacity-0'), 10);
+                } else {
+                    sidebar.classList.add('-translate-x-full');
+                    sidebarOverlay.classList.add('opacity-0');
+                    setTimeout(() => sidebarOverlay.classList.add('hidden'), 300);
+                }
+            }
+
+            if (mobileMenuBtn) mobileMenuBtn.addEventListener('click', toggleSidebar);
+            if (closeSidebarBtn) closeSidebarBtn.addEventListener('click', toggleSidebar);
+            if (sidebarOverlay) sidebarOverlay.addEventListener('click', toggleSidebar);
+
             // --- Funções de Renderização ---
+            
+            // Função para renderizar o gráfico de ganhos
+            function renderEarningsChart() {
+                const ctx = document.getElementById('earningsChart');
+                if (!ctx) return;
+                
+                // Configuração de cores baseada no tema
+                const isLight = state.theme === 'light';
+                const textColor = isLight ? '#374151' : '#9ca3af'; // gray-700 vs gray-400
+                const gridColor = isLight ? 'rgba(0,0,0,0.05)' : 'rgba(255,255,255,0.05)';
+                const tooltipBg = isLight ? '#ffffff' : '#1f2937';
+                const tooltipText = isLight ? '#111827' : '#f9fafb';
+
+                // Destrói gráfico anterior se existir
+                if (chartInstance) {
+                    chartInstance.destroy();
+                }
+
+                chartInstance = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: ['01 Ago', '03 Ago', '05 Ago', '07 Ago', '09 Ago', '11 Ago', '13 Ago'],
+                        datasets: [
+                            {
+                                label: 'Rendimento Diário',
+                                data: [12, 19, 15, 25, 22, 30, 35],
+                                borderColor: '#4ade80', // green-400
+                                backgroundColor: 'rgba(74, 222, 128, 0.1)',
+                                tension: 0.4,
+                                fill: true,
+                                pointBackgroundColor: '#4ade80',
+                                borderWidth: 2
+                            },
+                            {
+                                label: 'Bônus de Rede',
+                                data: [5, 10, 8, 15, 12, 20, 25],
+                                borderColor: '#f87171', // red-400
+                                backgroundColor: 'rgba(248, 113, 113, 0.1)',
+                                tension: 0.4,
+                                fill: true,
+                                pointBackgroundColor: '#f87171',
+                                borderWidth: 2
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        interaction: {
+                            mode: 'index',
+                            intersect: false,
+                        },
+                        plugins: {
+                            legend: {
+                                labels: {
+                                    color: textColor,
+                                    font: {
+                                        family: "'Inter', sans-serif",
+                                        size: 12
+                                    }
+                                }
+                            },
+                            tooltip: {
+                                backgroundColor: tooltipBg,
+                                titleColor: tooltipText,
+                                bodyColor: tooltipText,
+                                borderColor: isLight ? '#e5e7eb' : '#374151',
+                                borderWidth: 1,
+                                padding: 10,
+                                displayColors: true,
+                                boxWidth: 10
+                            }
+                        },
+                        scales: {
+                            x: {
+                                ticks: {
+                                    color: textColor
+                                },
+                                grid: {
+                                    color: gridColor,
+                                    drawBorder: false
+                                }
+                            },
+                            y: {
+                                ticks: {
+                                    color: textColor,
+                                    callback: function(value) {
+                                        return 'POL ' + value;
+                                    }
+                                },
+                                grid: {
+                                    color: gridColor,
+                                    drawBorder: false
+                                },
+                                beginAtZero: true
+                            }
+                        }
+                    }
+                });
+            }
+
+            // Função para gerar HTML recursivo da árvore
+            function renderTree(node) {
+                if (!node) return '';
+
+                let childrenHtml = '';
+                if (node.children && node.children.length > 0) {
+                    childrenHtml = '<ul>' + node.children.map(child => `<li>${renderTree(child)}</li>`).join('') + '</ul>';
+                }
+
+                // Tradução do Status
+                const t = translations[state.currentLanguage];
+                const activeLabel = t['tree_active'];
+                const vacantLabel = t['tree_vacant'];
+                // Tradução especial para "Você" se o nome corresponder
+                const nameDisplay = node.name === 'Você' ? t['tree_you'] : node.name;
+
+                // Definição das classes baseadas no status
+                const activeClass = node.active ? 'bg-white ring-2 ring-green-500' : 'bg-gray-600 ring-2 ring-gray-400 opacity-50';
+                const img = node.active ? node.img : 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJjdXJyZW50Q29sb3IiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIiBjbGFzcz0idGV4dC1ncmF5LTQwMCI+PGNpcmNsZSBjeD0iMTIiIGN5PSI4IiByPSI0IiAvPjxwYXRoIGQ9Ik02IDIxdjItMmE0IDQgMCAwIDEgNC00aDRhNCA0IDAgMCAxIDQgNHYyIiAvPjwvc3ZnPg==';
+
+                return `
+                    <div class="tree-node relative group" tabindex="0">
+                         <div class="w-12 h-12 md:w-16 md:h-16 rounded-full overflow-hidden flex items-center justify-center shadow-lg ${activeClass} mx-auto cursor-pointer">
+                            <img src="${img}" alt="${nameDisplay}" class="w-full h-full object-cover">
+                         </div>
+                         <!-- Tooltip -->
+                         <div class="tree-tooltip">
+                            <p class="font-bold text-sm text-white">${nameDisplay}</p>
+                            <p class="text-xs text-dynamic-muted">${node.login}</p>
+                            <span class="block mt-1 text-xs ${node.active ? 'text-green-400' : 'text-gray-400'}">${node.active ? activeLabel : vacantLabel}</span>
+                         </div>
+                    </div>
+                    ${childrenHtml}
+                `;
+            }
+
+            function renderBinaryTree() {
+                if (!treeContainer) return;
+                const treeHtml = `<div class="tree"><ul><li>${renderTree(state.binaryTreeData)}</li></ul></div>`;
+                treeContainer.innerHTML = treeHtml;
+            }
 
             function renderHeaderIcons(containerId) {
                 const container = document.getElementById(containerId);
                 if (!container) return;
                 
-                // MELHORIA: Aumentado padding para p-4 para maior área de clique
-                const buttonClasses = "p-4 rounded-full hover:bg-dynamic-tertiary flex items-center justify-center transition-colors";
+                const buttonClasses = "p-2 sm:p-3 rounded-full hover:bg-dynamic-tertiary flex items-center justify-center transition-colors focus:outline-none focus:ring-2 focus:ring-red-500/50";
                 
                 container.innerHTML = `
                     <div class="relative">
-                        <button class="theme-trigger ${buttonClasses}">
-                            <!-- O ícone do tema será inserido aqui pelo applyTheme() -->
+                        <button class="theme-trigger ${buttonClasses}" aria-label="Alternar Tema">
                         </button>
                     </div>
                     <div class="relative">
-                        <button class="language-trigger ${buttonClasses}">
+                        <button class="language-trigger ${buttonClasses}" aria-label="Mudar Idioma">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-dynamic-muted pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9V3m0 18a9 9 0 009-9m-9 9a9 9 0 00-9-9" /></svg>
                         </button>
-                        <div class="language-menu dropdown-menu hidden absolute top-full right-0 mt-2 w-48 bg-dynamic-tertiary rounded-lg shadow-lg opacity-0 transform scale-95 z-10 p-2"></div>
+                        <div class="language-menu dropdown-menu hidden absolute top-full right-0 mt-2 w-48 bg-dynamic-tertiary rounded-lg shadow-lg opacity-0 transform scale-95 z-10 p-2 border border-dynamic"></div>
                     </div>
                     <div class="relative">
-                        <button class="notification-trigger ${buttonClasses}">
+                        <button class="notification-trigger ${buttonClasses}" aria-label="Notificações">
                             <span class="relative pointer-events-none">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-dynamic-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6 6 0 00-5-5.917V5a1 1 0 10-2 0v.083A6 6 0 006 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>
-                                <span class="absolute top-0 right-0 h-2 w-2 bg-red-500 rounded-full notification-badge"></span>
+                                <span class="absolute top-0 right-0 h-2 w-2 bg-red-500 rounded-full notification-badge border border-dynamic"></span>
                             </span>
                         </button>
-                        <div class="notification-menu dropdown-menu hidden absolute top-full right-0 mt-2 w-80 bg-dynamic-tertiary rounded-lg shadow-lg opacity-0 transform scale-95 z-10"></div>
+                        <div class="notification-menu dropdown-menu hidden absolute top-full right-0 mt-2 w-80 bg-dynamic-tertiary rounded-lg shadow-lg opacity-0 transform scale-95 z-10 border border-dynamic"></div>
                     </div>
-                    <button class="profile-trigger w-10 h-10 rounded-full bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-red-500 flex items-center justify-center">
+                    <button class="profile-trigger w-10 h-10 rounded-full bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-red-500 flex items-center justify-center ml-2 shadow-sm">
                          <img src="https://placehold.co/40x40/4a5568/ffffff?text=U" alt="User Profile" class="header-profile-img w-full h-full rounded-full object-cover pointer-events-none">
                     </button>
                 `;
@@ -613,7 +998,7 @@
                 Object.keys(translations).forEach(langCode => {
                     const langName = translations[langCode].lang_name;
                     const button = document.createElement('button');
-                    button.className = 'language-option w-full text-left px-4 py-2 text-sm text-dynamic-secondary hover:bg-dynamic-primary rounded-md';
+                    button.className = 'language-option w-full text-left px-4 py-2 text-sm text-dynamic-secondary hover:bg-dynamic-primary rounded-md transition-colors';
                     button.textContent = langName;
                     button.dataset.lang = langCode;
                     menuElement.appendChild(button);
@@ -626,9 +1011,9 @@
                     <div class="p-3 border-b border-dynamic">
                         <h4 class="font-semibold text-dynamic-primary">Notificações</h4>
                     </div>
-                    <div class="max-h-64 overflow-y-auto">
+                    <div class="max-h-64 overflow-y-auto custom-scrollbar">
                         ${state.notifications.map(n => `
-                            <a href="#" class="flex items-start px-4 py-3 hover:bg-dynamic-primary ${n.read ? 'opacity-60' : ''}">
+                            <a href="#" class="flex items-start px-4 py-3 hover:bg-dynamic-primary ${n.read ? 'opacity-60' : ''} border-b border-dynamic last:border-0 transition-colors">
                                 <div class="flex-shrink-0">
                                     <div class="w-8 h-8 rounded-full flex items-center justify-center ${n.type === 'suporte' ? 'bg-blue-500' : 'bg-green-500'}">
                                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -645,7 +1030,7 @@
                             </a>
                         `).join('')}
                     </div>
-                    <div class="p-2 text-center">
+                    <div class="p-2 text-center bg-dynamic-secondary rounded-b-lg">
                         <a href="#" class="text-sm text-red-400 hover:underline">Ver todas as notificações</a>
                     </div>
                 `;
@@ -673,10 +1058,14 @@
                     const li = document.createElement('li');
                     const button = document.createElement('button');
                     button.dataset.section = item.id;
-                    button.className = `nav-button w-full flex items-center justify-center lg:justify-start p-3 rounded-lg transition-all duration-200 ${state.activeSection === item.id ? 'bg-red-600 text-white' : 'hover:bg-dynamic-tertiary text-dynamic-muted hover:text-dynamic-primary'}`;
+                    button.className = `nav-button w-full flex items-center justify-start lg:justify-start p-3 rounded-lg transition-all duration-200 group ${state.activeSection === item.id ? 'bg-red-600 text-white shadow-md' : 'hover:bg-dynamic-tertiary text-dynamic-muted hover:text-dynamic-primary'}`;
                     button.innerHTML = `
-                        <span class="flex-shrink-0">${item.icon}</span>
-                        <span class="hidden lg:block ml-3" data-translate-key="${item.labelKey}">${translations[state.currentLanguage][item.labelKey] || item.labelKey}</span>
+                        <span class="flex-shrink-0 group-hover:scale-110 transition-transform duration-200">${item.icon}</span>
+                        <span class="block md:hidden lg:block ml-3 font-medium truncate" data-translate-key="${item.labelKey}">${translations[state.currentLanguage][item.labelKey] || item.labelKey}</span>
+                        <!-- Tooltip para Tablet (quando só o ícone aparece) -->
+                        <span class="hidden md:block lg:hidden absolute left-16 bg-gray-900 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity z-50 pointer-events-none whitespace-nowrap shadow-lg">
+                            ${translations[state.currentLanguage][item.labelKey] || item.labelKey}
+                        </span>
                     `;
                     li.appendChild(button);
                     navMenu.appendChild(li);
@@ -686,20 +1075,31 @@
             function renderPlans() {
                 if(!plansContainer) return;
                 plansContainer.innerHTML = '';
+                
+                // Tradução atual
+                const t = translations[state.currentLanguage];
+
                 state.plans.forEach(plan => {
                     const isCurrent = state.currentPlan === plan.name;
+                    
+                    // Determinar o texto da nota com base no tipo
+                    const noteText = plan.noteType === "double" ? t['plan_note_double'] : t['plan_note_no_double'];
+                    const noteColor = plan.noteType === "double" ? 'text-green-400' : 'text-yellow-500';
+                    const btnText = isCurrent ? t['plan_btn_active'] : t['plan_btn_upgrade'];
+
                     const card = document.createElement('div');
-                    card.className = `bg-dynamic-secondary p-6 rounded-xl shadow-lg border-2 transition-all ${isCurrent ? 'border-red-500' : 'border-dynamic hover:border-red-500/50'}`;
+                    card.className = `bg-dynamic-secondary p-6 rounded-xl shadow-lg border-2 transition-all duration-300 hover:shadow-xl hover:-translate-y-1 ${isCurrent ? 'border-red-500' : 'border-dynamic hover:border-red-500/50'}`;
+                    
                     card.innerHTML = `
                         <h3 class="text-2xl font-bold text-dynamic-primary mb-2">${plan.name}</h3>
-                        <p class="text-lg text-dynamic-secondary mb-4">Investimento: <span class="font-semibold">${plan.investment} POL</span></p>
+                        <p class="text-lg text-dynamic-secondary mb-4">${t['plan_investment']}: <span class="font-semibold">${plan.investment} POL</span></p>
                         <ul class="space-y-3 text-dynamic-muted mb-6">
-                            <li class="flex items-center"><svg class="w-5 h-5 mr-2 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>${plan.binaryGain}% Ganho Binário</li>
-                            <li class="flex items-center"><svg class="w-5 h-5 mr-2 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>Limite Diário de ${plan.dailyLimit} POL</li>
-                            <li class="flex items-center ${plan.note.includes('NÃO') ? 'text-yellow-500' : 'text-green-400'}"><svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>${plan.note}</li>
+                            <li class="flex items-center"><svg class="w-5 h-5 mr-2 text-green-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>${plan.binaryGain}% ${t['plan_binary']}</li>
+                            <li class="flex items-center"><svg class="w-5 h-5 mr-2 text-green-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>${t['plan_daily_limit']} ${plan.dailyLimit} POL</li>
+                            <li class="flex items-center ${noteColor}"><svg class="w-5 h-5 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>${noteText}</li>
                         </ul>
-                        <button ${isCurrent ? 'disabled' : ''} class="w-full bg-red-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-red-700 transition-colors disabled:bg-gray-600 disabled:cursor-not-allowed">
-                            ${isCurrent ? 'Plano Ativo' : 'Fazer Upgrade'}
+                        <button ${isCurrent ? 'disabled' : ''} class="w-full bg-red-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-red-700 transition-colors disabled:bg-gray-600 disabled:cursor-not-allowed shadow-md">
+                            ${btnText}
                         </button>
                     `;
                     plansContainer.appendChild(card);
@@ -717,7 +1117,7 @@
                 container.innerHTML = '';
                 avatars.forEach(src => {
                     const button = document.createElement('button');
-                    button.className = 'rounded-full focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-red-500';
+                    button.className = 'rounded-full focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-red-500 hover:scale-110 transition-transform duration-200';
                     button.innerHTML = `<img src="${src}" alt="Avatar" class="w-16 h-16 rounded-full object-cover">`;
                     button.addEventListener('click', () => updateProfileImage(src));
                     container.appendChild(button);
@@ -726,55 +1126,68 @@
 
             function renderFinancialContent() {
                 if(!financialContent) return;
+                
+                // Tradução atual
+                const t = translations[state.currentLanguage];
+
                 let content = '';
                 if (state.activeFinancialTab === 'rendimentos') {
                     content = `
                         <div>
-                            <h4 class="text-lg font-semibold mb-4 text-dynamic-primary">Histórico de Ganhos do Pacote</h4>
+                            <h4 class="text-lg font-semibold mb-4 text-dynamic-primary">${t['fin_history_title']}</h4>
                             <div class="overflow-x-auto">
-                                <table class="min-w-full text-sm text-left text-dynamic-muted">
+                                <table class="min-w-full text-sm text-left text-dynamic-muted whitespace-nowrap">
                                     <thead class="text-xs text-dynamic-secondary uppercase bg-dynamic-tertiary/50">
                                         <tr>
-                                            <th scope="col" class="px-6 py-3">Data</th>
-                                            <th scope="col" class="px-6 py-3">Descrição</th>
-                                            <th scope="col" class="px-6 py-3">Valor (POL)</th>
+                                            <th scope="col" class="px-6 py-3 rounded-tl-lg">${t['fin_col_date']}</th>
+                                            <th scope="col" class="px-6 py-3">${t['fin_col_desc']}</th>
+                                            <th scope="col" class="px-6 py-3 rounded-tr-lg">${t['fin_col_value']}</th>
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        <tr class="border-b border-dynamic">
+                                        <tr class="border-b border-dynamic hover:bg-dynamic-tertiary/20 transition-colors">
                                             <td class="px-6 py-4">10/08/2025</td>
-                                            <td class="px-6 py-4">Rendimento diário</td>
-                                            <td class="px-6 py-4 text-green-400">+13.88</td>
+                                            <td class="px-6 py-4">${t['fin_desc_daily']}</td>
+                                            <td class="px-6 py-4 text-green-400 font-medium">+13.88</td>
                                         </tr>
-                                        <tr class="border-b border-dynamic">
+                                        <tr class="border-b border-dynamic hover:bg-dynamic-tertiary/20 transition-colors">
                                             <td class="px-6 py-4">09/08/2025</td>
-                                            <td class="px-6 py-4">Rendimento diário</td>
-                                            <td class="px-6 py-4 text-green-400">+13.88</td>
+                                            <td class="px-6 py-4">${t['fin_desc_daily']}</td>
+                                            <td class="px-6 py-4 text-green-400 font-medium">+13.88</td>
                                         </tr>
                                     </tbody>
                                 </table>
                             </div>
                         </div>`;
                 } else if (state.activeFinancialTab === 'binario') {
-                    content = `<div><h4 class="text-lg font-semibold text-dynamic-primary">Relatório de Binário...</h4></div>`;
+                    content = `<div><h4 class="text-lg font-semibold text-dynamic-primary mb-2">${t['fin_report_binary']}</h4><p class="text-dynamic-muted">${t['fin_no_records']}</p></div>`;
                 } else if (state.activeFinancialTab === 'historico') {
-                    content = `<div><h4 class="text-lg font-semibold text-dynamic-primary">Histórico de Pacotes...</h4><p>Upgrade de 'Gladp 4' para 'Gladp 5' em 10/08/2025 às 14:30.</p></div>`;
+                    content = `
+                        <div>
+                            <h4 class="text-lg font-semibold text-dynamic-primary mb-4">${t['fin_history_packages']}</h4>
+                            <div class="bg-dynamic-tertiary/20 p-4 rounded-lg border border-dynamic">
+                                <p class="text-dynamic-secondary">${t['fin_upgrade_text']} <span class="font-bold text-white">Gladp 4</span> -> <span class="font-bold text-white">Gladp 5</span></p>
+                                <p class="text-sm text-dynamic-muted mt-1">10/08/2025 às 14:30</p>
+                            </div>
+                        </div>`;
                 }
                 financialContent.innerHTML = content;
             }
 
             function renderFinancialTabs() {
                 if(!financialTabs) return;
+                // Busca as traduções dinâmicas para os nomes das abas
+                const t = translations[state.currentLanguage];
                 const tabs = [
-                    { id: 'rendimentos', label: 'Relatório de Rendimentos' },
-                    { id: 'binario', label: 'Relatório de Binário' },
-                    { id: 'historico', label: 'Histórico de Pacotes' },
+                    { id: 'rendimentos', label: t['fin_history_title'] },
+                    { id: 'binario', label: t['fin_report_binary'] },
+                    { id: 'historico', label: t['fin_history_packages'] },
                 ];
                 financialTabs.innerHTML = '';
                 tabs.forEach(tab => {
                     const button = document.createElement('button');
                     button.dataset.tab = tab.id;
-                    button.className = `financial-tab-trigger px-3 py-2 font-medium text-sm rounded-md ${state.activeFinancialTab === tab.id ? 'bg-red-600 text-white' : 'text-dynamic-muted hover:bg-dynamic-tertiary hover:text-dynamic-primary'}`;
+                    button.className = `financial-tab-trigger px-4 py-2 font-medium text-sm rounded-md whitespace-nowrap transition-colors ${state.activeFinancialTab === tab.id ? 'bg-red-600 text-white shadow-sm' : 'text-dynamic-muted hover:bg-dynamic-tertiary hover:text-dynamic-primary'}`;
                     button.textContent = tab.label;
                     financialTabs.appendChild(button);
                 });
@@ -806,6 +1219,9 @@
                 themeTriggers.forEach(trigger => {
                     trigger.innerHTML = state.theme === 'light' ? moonIcon : sunIcon;
                 });
+                
+                // Atualiza o gráfico quando o tema muda
+                renderEarningsChart();
             }
 
             // --- Lógica de Eventos ---
@@ -816,7 +1232,16 @@
                 document.querySelectorAll('.section-content').forEach(el => el.classList.remove('active'));
                 const activeSection = document.getElementById(sectionId);
                 if (activeSection) activeSection.classList.add('active');
+                
+                // Em mobile, fechar o sidebar após navegar
+                if (window.innerWidth < 768 && sidebar && !sidebar.classList.contains('-translate-x-full')) {
+                    toggleSidebar();
+                }
+
                 applyTranslations();
+                
+                // Scroll to top
+                window.scrollTo({ top: 0, behavior: 'smooth' });
             }
 
             function showCopyToast() {
@@ -865,14 +1290,23 @@
                 
                 const isMenuOpen = activeMenu ? !activeMenu.classList.contains('hidden') : false;
 
-                allDropdowns.forEach(m => {
-                    if (m !== activeMenu) m.classList.add('hidden', 'opacity-0', 'scale-95');
-                });
+                // Fechar dropdowns ao clicar fora
+                if (!langTrigger && !notificationTrigger && !target.closest('.dropdown-menu')) {
+                    allDropdowns.forEach(m => m.classList.add('hidden', 'opacity-0', 'scale-95'));
+                } else {
+                    // Fechar outros se abrir um novo
+                    allDropdowns.forEach(m => {
+                        if (m !== activeMenu) m.classList.add('hidden', 'opacity-0', 'scale-95');
+                    });
+                }
                 
                 if (activeMenu) {
                     activeMenu.classList.toggle('hidden');
-                    activeMenu.classList.toggle('opacity-0');
-                    activeMenu.classList.toggle('scale-95');
+                    // Pequeno delay para animação de CSS funcionar se removermos o hidden
+                    setTimeout(() => {
+                        activeMenu.classList.toggle('opacity-0');
+                        activeMenu.classList.toggle('scale-95');
+                    }, 10);
                 }
                 
                 // Toggle do tema
@@ -890,6 +1324,14 @@
                     state.currentLanguage = langOption.dataset.lang;
                     renderNavMenu();
                     applyTranslations();
+                    
+                    // RE-RENDERIZAR COMPONENTES DINÂMICOS NA MUDANÇA DE IDIOMA
+                    renderPlans();
+                    renderFinancialTabs();
+                    renderBinaryTree();
+
+                    // Fechar menu após selecionar
+                    langOption.parentElement.classList.add('hidden', 'opacity-0', 'scale-95');
                 }
 
                 if (navButton) handleNavigate(navButton.dataset.section);
@@ -925,6 +1367,8 @@
             renderPlans();
             renderAvatars(avatarGridMain);
             renderFinancialTabs();
+            renderBinaryTree(); // Inicia a árvore
+            renderEarningsChart(); // Inicia o gráfico
             applyTranslations();
         });
     </script>
